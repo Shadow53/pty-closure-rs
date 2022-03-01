@@ -9,8 +9,6 @@ jobs:
   fossa:
     name: Fossa License Check
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.cargo == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -50,7 +48,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # Linux is handled by the coverage check
         os: ["ubuntu-latest", "macos-latest"]
     steps:
       - name: Checkout repository
@@ -91,7 +88,7 @@ jobs:
 
       - name: Cargo Test (Grcov)
         uses: actions-rs/cargo@v1
-        if: matrix.os == "ubuntu-latest"
+        if: matrix.os == 'ubuntu-latest'
         with:
           command: test
           args: --all-features --no-fail-fast
@@ -103,7 +100,7 @@ jobs:
           LLVM_PROFILE_FILE: 'profraw/test-%p-%m.profraw'
 
       - name: Run grcov
-        if: matrix.os == "ubuntu-latest"
+        if: matrix.os == 'ubuntu-latest'
         run: |
           grcov profraw/*.profraw --binary-path target/debug \
             -s . -t lcov --branch --ignore-not-existing --ignore '../**' --ignore '/*' -o coverage.lcov \
@@ -122,6 +119,7 @@ jobs:
 
 
       - name: Upload to codecov.io
+        if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
