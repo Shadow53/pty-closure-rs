@@ -53,8 +53,6 @@
     while_true
 )]
 
-use std::time::Duration;
-
 use nix::errno::Errno;
 use nix::pty::{forkpty, ForkptyResult};
 use nix::sys::signal::Signal;
@@ -108,6 +106,7 @@ pub unsafe fn run_in_pty<F>(func: F) -> Result<(), Error> where F: FnOnce() -> R
         ForkResult::Parent { child } => {
             loop {
                 let result = waitpid(child, None).map_err(Error::Wait)?;
+                #[allow(clippy::match_same_arms)]
                 match result {
                     WaitStatus::Exited(_, status_code) => {
                         if status_code == 0 {
@@ -119,9 +118,17 @@ pub unsafe fn run_in_pty<F>(func: F) -> Result<(), Error> where F: FnOnce() -> R
                     WaitStatus::Signaled(_, signal, _generated_core_dump) => {
                         break Err(Error::KilledBySignal(signal));
                     },
-                    _ => {
-                        std::thread::sleep(Duration::from_millis(250));
-                    }
+                    // grcov: ignore-start
+                    // Stopped/Continued should not happen because the appropriate flags were not
+                    // passed to `waitpid`. If they do get returned, we don't care because we are
+                    // still waiting for the process to exit.
+                    WaitStatus::Stopped(..) | WaitStatus::Continued(..) => {},
+                    // This function does not care about linux-specific ptrace statuses.
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    WaitStatus::PtraceEvent(..) | WaitStatus::PtraceSyscall(..) => {},
+                    // StillAlive also requires an option flag to be passed and gives us no useful information.
+                    WaitStatus::StillAlive => {},
+                    // grcov: ignore-end
                 }
             }
         }
@@ -131,6 +138,8 @@ pub unsafe fn run_in_pty<F>(func: F) -> Result<(), Error> where F: FnOnce() -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
 
     #[allow(clippy::unnecessary_wraps)]
     fn successful_func() -> Result<(), i32> {
@@ -226,6 +235,22 @@ mod tests {
                 random_file.write_all(&vec![0; 0x4000_0000]).expect("writing to temp file should not fail");
                 Ok(())
             }));
+        }
+    }
+
+    #[test]
+    fn test_kill_with_signal() {
+        use nix::unistd::Pid;
+        use nix::sys::signal;
+        unsafe {
+            let result = run_in_pty(|| {
+                signal::kill(Pid::this(), Signal::SIGKILL)
+                    .expect("sending signal should succeed");
+                std::thread::sleep(Duration::from_secs(3));
+                Ok(())
+            });
+
+            assert!(matches!(result, Err(Error::KilledBySignal(Signal::SIGKILL))), "expected child process to kill itself with SIGKILL");
         }
     }
 }
