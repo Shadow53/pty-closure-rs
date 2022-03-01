@@ -1,14 +1,14 @@
 [package]
 name = "pty_closure"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license-file = "LICENSE"
 documentation = "https://docs.rs/pty_closure/latest/pty_closure"
 repository = "https://github.com/Shadow53/pty-closure-rs"
 description = "Run functions and closures in a pseudoterminal"
 categories = [
-    "Development tools",
-    "Development tools::Testing",
+    "development-tools",
+    "development-tools::testing",
 ]
 tags = [
     "pseudoterminal",
