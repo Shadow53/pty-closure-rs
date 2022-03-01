@@ -4,7 +4,9 @@
 //! running the closure, and then reporting the resulting status code.
 //!
 //! - `0`: success, returned as `Ok(())`
-//! - Anything else: failure, returned as `Err(i32)`
+//! - Anything else: failure, returned as [`Err(Error)`]
+//!
+//! See [`run_in_pty`] for usage.
 
 #![deny(clippy::all)]
 #![deny(clippy::correctness)]
@@ -82,6 +84,13 @@ pub enum Error {
 }
 
 /// Run a closure in a forked pseudoterminal process.
+///
+/// # Limitations
+///
+/// - No method of reading/writing the child's stdout/stdin
+/// - Will not return until the child process exits or is killed.
+///   - That is, a stopped process that may be resumed will leave this function
+///     waiting until the process continues and then exits or is killed.
 ///
 /// # Errors
 ///
