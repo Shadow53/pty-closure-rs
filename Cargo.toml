@@ -1,8 +1,8 @@
 [package]
 name = "pty_closure"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
-license-file = "LICENSE"
+license = "MIT"
 documentation = "https://docs.rs/pty_closure/latest/pty_closure"
 repository = "https://github.com/Shadow53/pty-closure-rs"
 description = "Run functions and closures in a pseudoterminal"
