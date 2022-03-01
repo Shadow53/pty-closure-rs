@@ -1,0 +1,128 @@
+on:
+  push:
+  release:
+    types: [created]
+
+name: Checks and Releases
+
+jobs:
+  fossa:
+    name: Fossa License Check
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.cargo == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - uses: fossa-contrib/fossa-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Push-only API key
+          fossa-api-key: 7b6d2d5fb78bb718019e16184020ef6d
+
+  fmt:
+    name: Cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - uses: Swatinem/rust-cache@v1
+        with:
+          cache-on-failure: true
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: clippy, rustfmt
+
+      - name: Cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+  check-stable:
+    name: Check Commit
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Linux is handled by the coverage check
+        os: ["ubuntu-latest", "macos-latest"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - uses: Swatinem/rust-cache@v1
+        with:
+          cache-on-failure: true
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: llvm-tools-preview
+
+      - name: Cargo Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
+      - name: Install Grcov
+        uses: actions-rs/install@v0.1
+        with:
+          crate: grcov
+          version: latest
+          use-tool-cache: true
+
+      - name: Cargo Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+        env:
+          RUSTC_BOOTSTRAP: '1'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zinstrument-coverage'
+          RUSTDOCFLAGS: '-Zinstrument-coverage'
+
+      - name: Cargo Test (Grcov)
+        uses: actions-rs/cargo@v1
+        if: matrix.os == "ubuntu-latest"
+        with:
+          command: test
+          args: --all-features --no-fail-fast
+        env:
+          RUSTC_BOOTSTRAP: '1'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zinstrument-coverage'
+          RUSTDOCFLAGS: '-Zinstrument-coverage'
+          LLVM_PROFILE_FILE: 'profraw/test-%p-%m.profraw'
+
+      - name: Run grcov
+        if: matrix.os == "ubuntu-latest"
+        run: |
+          grcov profraw/*.profraw --binary-path target/debug \
+            -s . -t lcov --branch --ignore-not-existing --ignore '../**' --ignore '/*' -o coverage.lcov \
+          --excl-br-line "($EXCLUDE_DERIVE|$EXCLUDE_MANUAL|$EXCLUDE_LONE_CLOSING_BRACE)" \
+          --excl-line "($EXCLUDE_DERIVE|$EXCLUDE_MANUAL|$EXCLUDE_LONE_CLOSING_BRACE)" \
+          --excl-br-start "(grcov: ignore-start|mod tests)" --excl-start "(grcov: ignore-start|mod tests)" \
+          --excl-br-stop "grcov: ignore-end" --excl-stop "grcov: ignore-end"
+        env:
+          RUSTFLAGS: "-Zinstrument-coverage"
+          RUSTC_BOOTSTRAP: "1"
+          RUSTUP_TOOLCHAIN: "stable"
+          HOARD_LOG: "trace"
+          EXCLUDE_DERIVE: "#\\[derive\\("
+          EXCLUDE_MANUAL: "grcov: ignore"
+          EXCLUDE_LONE_CLOSING_BRACE: "^\\s*\\}\\s*$"
+
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.lcov
