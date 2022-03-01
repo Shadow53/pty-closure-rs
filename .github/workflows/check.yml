@@ -3,7 +3,7 @@ on:
   release:
     types: [created]
 
-name: Checks and Releases
+name: Checks
 
 jobs:
   fossa:
