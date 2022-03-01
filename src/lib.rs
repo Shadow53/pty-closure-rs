@@ -142,8 +142,7 @@ where
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     WaitStatus::PtraceEvent(..) | WaitStatus::PtraceSyscall(..) => {}
                     // StillAlive also requires an option flag to be passed and gives us no useful information.
-                    WaitStatus::StillAlive => {}
-                    // grcov: ignore-end
+                    WaitStatus::StillAlive => {} // grcov: ignore-end
                 }
             }
         }
