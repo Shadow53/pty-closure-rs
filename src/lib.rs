@@ -58,7 +58,7 @@
 use nix::errno::Errno;
 use nix::pty::{forkpty, ForkptyResult};
 use nix::sys::signal::Signal;
-use nix::sys::wait::{WaitStatus, waitpid};
+use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::ForkResult;
 use thiserror::Error;
 
@@ -100,8 +100,14 @@ pub enum Error {
 ///
 /// See [`nix::pty::forkpty`]. In short, do not use this in multithreaded applications unless you
 /// know what you are doing.
-pub unsafe fn run_in_pty<F>(func: F) -> Result<(), Error> where F: FnOnce() -> Result<(), i32> {
-    let ForkptyResult { master: _, fork_result } = forkpty(None, None).map_err(Error::Fork)?;
+pub unsafe fn run_in_pty<F>(func: F) -> Result<(), Error>
+where
+    F: FnOnce() -> Result<(), i32>,
+{
+    let ForkptyResult {
+        master: _,
+        fork_result,
+    } = forkpty(None, None).map_err(Error::Fork)?;
 
     match fork_result {
         ForkResult::Child => {
@@ -111,7 +117,7 @@ pub unsafe fn run_in_pty<F>(func: F) -> Result<(), Error> where F: FnOnce() -> R
             };
 
             std::process::exit(exit_code);
-        },
+        }
         ForkResult::Parent { child } => {
             loop {
                 let result = waitpid(child, None).map_err(Error::Wait)?;
@@ -123,20 +129,20 @@ pub unsafe fn run_in_pty<F>(func: F) -> Result<(), Error> where F: FnOnce() -> R
                         }
 
                         break Err(Error::NonZeroExitCode(status_code));
-                    },
+                    }
                     WaitStatus::Signaled(_, signal, _generated_core_dump) => {
                         break Err(Error::KilledBySignal(signal));
-                    },
+                    }
                     // grcov: ignore-start
                     // Stopped/Continued should not happen because the appropriate flags were not
                     // passed to `waitpid`. If they do get returned, we don't care because we are
                     // still waiting for the process to exit.
-                    WaitStatus::Stopped(..) | WaitStatus::Continued(..) => {},
+                    WaitStatus::Stopped(..) | WaitStatus::Continued(..) => {}
                     // This function does not care about linux-specific ptrace statuses.
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    WaitStatus::PtraceEvent(..) | WaitStatus::PtraceSyscall(..) => {},
+                    WaitStatus::PtraceEvent(..) | WaitStatus::PtraceSyscall(..) => {}
                     // StillAlive also requires an option flag to be passed and gives us no useful information.
-                    WaitStatus::StillAlive => {},
+                    WaitStatus::StillAlive => {}
                     // grcov: ignore-end
                 }
             }
@@ -148,7 +154,6 @@ pub unsafe fn run_in_pty<F>(func: F) -> Result<(), Error> where F: FnOnce() -> R
 mod tests {
     use super::*;
     use std::time::Duration;
-
 
     #[allow(clippy::unnecessary_wraps)]
     fn successful_func() -> Result<(), i32> {
@@ -175,8 +180,12 @@ mod tests {
 
     #[test]
     fn test_basic_successful() {
-        unsafe { run_in_pty(|| Ok(())).expect("running successful closure should not error"); }
-        unsafe { run_in_pty(successful_func).expect("running successful function should not error"); }
+        unsafe {
+            run_in_pty(|| Ok(())).expect("running successful closure should not error");
+        }
+        unsafe {
+            run_in_pty(successful_func).expect("running successful function should not error");
+        }
     }
 
     #[test]
@@ -196,15 +205,21 @@ mod tests {
     #[test]
     fn test_delayed_closure() {
         unsafe {
-            assert_exit_code(0, run_in_pty(|| {
-                std::thread::sleep(Duration::from_secs(3));
-                Ok(())
-            }));
+            assert_exit_code(
+                0,
+                run_in_pty(|| {
+                    std::thread::sleep(Duration::from_secs(3));
+                    Ok(())
+                }),
+            );
 
-            assert_exit_code(9, run_in_pty(|| {
-                std::thread::sleep(Duration::from_secs(3));
-                Err(9)
-            }));
+            assert_exit_code(
+                9,
+                run_in_pty(|| {
+                    std::thread::sleep(Duration::from_secs(3));
+                    Err(9)
+                }),
+            );
         }
     }
 
@@ -215,8 +230,8 @@ mod tests {
             let error_code = 23;
             let error = Err(error_code);
 
-            assert_exit_code(0, run_in_pty(move || { success }));
-            assert_exit_code(error_code, run_in_pty(move || { error }));
+            assert_exit_code(0, run_in_pty(move || success));
+            assert_exit_code(error_code, run_in_pty(move || error));
         }
     }
 
@@ -224,13 +239,16 @@ mod tests {
     fn test_closure_allocating_memory() {
         for _ in 0..10 {
             unsafe {
-                assert_exit_code(0, run_in_pty(|| {
-                    const CAPACITY: usize = 1024 * 1024 * 512;
-                    let mut v = Vec::with_capacity(CAPACITY);
-                    v.resize(CAPACITY, 100_u8);
-                    assert_eq!(v.len(), CAPACITY);
-                    Ok(())
-                }));
+                assert_exit_code(
+                    0,
+                    run_in_pty(|| {
+                        const CAPACITY: usize = 1024 * 1024 * 512;
+                        let mut v = Vec::with_capacity(CAPACITY);
+                        v.resize(CAPACITY, 100_u8);
+                        assert_eq!(v.len(), CAPACITY);
+                        Ok(())
+                    }),
+                );
             }
         }
     }
@@ -239,27 +257,35 @@ mod tests {
     fn test_file_access() {
         use std::io::Write;
         unsafe {
-            assert_exit_code(0, run_in_pty(|| {
-                let mut random_file = tempfile::tempfile().expect("creating temp file should not fail");
-                random_file.write_all(&vec![0; 0x4000_0000]).expect("writing to temp file should not fail");
-                Ok(())
-            }));
+            assert_exit_code(
+                0,
+                run_in_pty(|| {
+                    let mut random_file =
+                        tempfile::tempfile().expect("creating temp file should not fail");
+                    random_file
+                        .write_all(&vec![0; 0x4000_0000])
+                        .expect("writing to temp file should not fail");
+                    Ok(())
+                }),
+            );
         }
     }
 
     #[test]
     fn test_kill_with_signal() {
-        use nix::unistd::Pid;
         use nix::sys::signal;
+        use nix::unistd::Pid;
         unsafe {
             let result = run_in_pty(|| {
-                signal::kill(Pid::this(), Signal::SIGKILL)
-                    .expect("sending signal should succeed");
+                signal::kill(Pid::this(), Signal::SIGKILL).expect("sending signal should succeed");
                 std::thread::sleep(Duration::from_secs(3));
                 Ok(())
             });
 
-            assert!(matches!(result, Err(Error::KilledBySignal(Signal::SIGKILL))), "expected child process to kill itself with SIGKILL");
+            assert!(
+                matches!(result, Err(Error::KilledBySignal(Signal::SIGKILL))),
+                "expected child process to kill itself with SIGKILL"
+            );
         }
     }
 }
