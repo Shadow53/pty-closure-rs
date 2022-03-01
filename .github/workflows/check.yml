@@ -70,25 +70,15 @@ jobs:
           command: check
 
       - name: Install Grcov
+        if: matrix.os == 'ubuntu-latest'
         uses: actions-rs/install@v0.1
         with:
           crate: grcov
           version: latest
           use-tool-cache: true
 
-      - name: Cargo Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-        env:
-          RUSTC_BOOTSTRAP: '1'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zinstrument-coverage'
-          RUSTDOCFLAGS: '-Zinstrument-coverage'
-
       - name: Cargo Test (Grcov)
         uses: actions-rs/cargo@v1
-        if: matrix.os == 'ubuntu-latest'
         with:
           command: test
           args: --all-features --no-fail-fast
